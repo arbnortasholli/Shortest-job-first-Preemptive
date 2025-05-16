@@ -10,7 +10,7 @@ import javafx.collections.ObservableList;
 import java.util.*;
 import java.util.concurrent.*;
 
-public class SFJController {
+public class SFJControllerAutomatic {
 
     @FXML
     private Label avgTurnaroundLabel;
@@ -20,6 +20,7 @@ public class SFJController {
 
     @FXML
     private Label avgResponseLabel;
+
     @FXML
     private TextField burstInput;
     @FXML
@@ -47,6 +48,8 @@ public class SFJController {
     private TableColumn<Process, Integer> responseTimeCol;
     @FXML
     private TableColumn<Process, Integer> turnaroundTimeCol;
+    @FXML
+    private TableColumn<Process, Integer> arrivalTimeCol;
 
     private final ObservableList<Process> readyQueue = FXCollections.observableArrayList();
     private final ObservableList<Process> completedList = FXCollections.observableArrayList();
@@ -54,6 +57,14 @@ public class SFJController {
 
     private ScheduledExecutorService scheduler;
     private int systemTime = 0;
+
+    private final Map<Integer, Integer> autoProcesses = Map.of(
+            0, 3,
+            1, 8,
+            2, 6,
+            4, 4,
+            5, 2
+    );
 
     @FXML
     public void initialize() {
@@ -66,6 +77,7 @@ public class SFJController {
         waitingTimeCol.setCellValueFactory(new PropertyValueFactory<>("waitingTime"));
         responseTimeCol.setCellValueFactory(new PropertyValueFactory<>("responseTime"));
         turnaroundTimeCol.setCellValueFactory(new PropertyValueFactory<>("turnaroundTime"));
+        arrivalTimeCol.setCellValueFactory(new PropertyValueFactory<>("arrivalTime"));
 
         processTable.setItems(readyQueue);
         completedTable.setItems(completedList);
@@ -79,29 +91,28 @@ public class SFJController {
         try {
             int burstTime = Integer.parseInt(burstInput.getText());
             if (burstTime <= 0) throw new NumberFormatException();
-            Process p = new Process(burstTime, systemTime);
-            Platform.runLater(() -> {
-                pq.add(p);
-                readyQueue.add(p);
-                burstInput.clear();
-            });
+            addProcess(new Process(burstTime, systemTime));
+            burstInput.clear();
         } catch (NumberFormatException e) {
             showError("Please enter a valid burst time > 0.");
         }
     }
 
+    private void addProcess(Process p) {
+        pq.add(p);
+        readyQueue.add(p);
+    }
+
     private void tick() {
         systemTime++;
 
+        if (autoProcesses.containsKey(systemTime - 1)) {
+            Process p = new Process(autoProcesses.get(systemTime - 1), systemTime - 1);
+            Platform.runLater(() -> addProcess(p));
+        }
+
         Platform.runLater(() -> {
-            SFJController.Process current = pq.peek();
-
-            for (Process p : pq) {
-                if (p != current && p.arrivalTime <= systemTime && p.remainingTime > 0) {
-                    p.waitingTime++;
-                }
-            }
-
+            Process current = pq.peek();
             if (current != null) {
                 if (!current.started) {
                     current.responseTime = systemTime - current.arrivalTime;
@@ -114,6 +125,8 @@ public class SFJController {
                     pq.poll();
                     current.completionTime = systemTime;
                     current.turnaroundTime = current.completionTime - current.arrivalTime;
+                    current.waitingTime = current.turnaroundTime - current.burstTime;
+                    if (current.waitingTime < 0) current.waitingTime = 0;
 
                     readyQueue.remove(current);
                     completedList.add(current);
@@ -125,7 +138,6 @@ public class SFJController {
             }
         });
     }
-
 
     private void showError(String message) {
         Platform.runLater(() -> {
@@ -150,7 +162,7 @@ public class SFJController {
         double totalWaiting = 0;
         double totalResponse = 0;
 
-        for (SFJController.Process p : completedList) {
+        for (Process p : completedList) {
             totalTurnaround += p.turnaroundTime;
             totalWaiting += p.waitingTime;
             totalResponse += p.responseTime;
@@ -186,5 +198,6 @@ public class SFJController {
         public int getWaitingTime() { return waitingTime; }
         public int getResponseTime() { return responseTime; }
         public int getTurnaroundTime() { return turnaroundTime; }
+        public int getArrivalTime() { return arrivalTime; }
     }
 }

@@ -11,7 +11,7 @@ public class Main extends Application {
     @Override
     public void start(Stage stage) throws IOException {
         FXMLLoader fxmlLoader = new FXMLLoader(Main.class.getResource("SFJ.fxml"));
-        Scene scene = new Scene(fxmlLoader.load(), 552, 591);
+        Scene scene = new Scene(fxmlLoader.load(), 652, 587);
         stage.setTitle("Shortest-Job-First (Preemptive)");
         stage.setScene(scene);
         stage.show();
