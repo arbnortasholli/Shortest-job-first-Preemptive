@@ -55,57 +55,58 @@ public class SFJController {
     private ScheduledExecutorService scheduler;
     private int systemTime = 0;
 
-    @FXML
+    @FXML  // Ky annotation lidh metoden me komponentin FXML kur inicializohet GUI-ja
     public void initialize() {
-        idCol.setCellValueFactory(new PropertyValueFactory<>("id"));
-        burstCol.setCellValueFactory(new PropertyValueFactory<>("burstTime"));
-        remainingCol.setCellValueFactory(new PropertyValueFactory<>("remainingTime"));
+        idCol.setCellValueFactory(new PropertyValueFactory<>("id")); // Lidhet kolona 'idCol' me pronën 'id' të objektit Process
+        burstCol.setCellValueFactory(new PropertyValueFactory<>("burstTime")); // Lidhet kolona 'burstCol' me pronën 'burstTime'
+        remainingCol.setCellValueFactory(new PropertyValueFactory<>("remainingTime")); // Lidhet kolona 'remainingCol' me 'remainingTime'
 
-        completedIdCol.setCellValueFactory(new PropertyValueFactory<>("id"));
-        completedBurstCol.setCellValueFactory(new PropertyValueFactory<>("burstTime"));
-        waitingTimeCol.setCellValueFactory(new PropertyValueFactory<>("waitingTime"));
-        responseTimeCol.setCellValueFactory(new PropertyValueFactory<>("responseTime"));
-        turnaroundTimeCol.setCellValueFactory(new PropertyValueFactory<>("turnaroundTime"));
+        completedIdCol.setCellValueFactory(new PropertyValueFactory<>("id")); // Lidhet kolona për proceset e përfunduara me 'id'
+        completedBurstCol.setCellValueFactory(new PropertyValueFactory<>("burstTime")); // Lidhet me 'burstTime' për të përfunduarit
+        waitingTimeCol.setCellValueFactory(new PropertyValueFactory<>("waitingTime")); // Lidhet me 'waitingTime' për të përfunduarit
+        responseTimeCol.setCellValueFactory(new PropertyValueFactory<>("responseTime")); // Lidhet me 'responseTime'
+        turnaroundTimeCol.setCellValueFactory(new PropertyValueFactory<>("turnaroundTime")); // Lidhet me 'turnaroundTime'
 
-        processTable.setItems(readyQueue);
-        completedTable.setItems(completedList);
+        processTable.setItems(readyQueue); // Vendos listen e proceseve të gatshme në tabelën 'processTable'
+        completedTable.setItems(completedList); // Vendos listen e proceseve të përfunduara në tabelën 'completedTable'
 
-        scheduler = Executors.newSingleThreadScheduledExecutor();
-        scheduler.scheduleAtFixedRate(this::tick, 1, 1, TimeUnit.SECONDS);
+
+        scheduler = Executors.newSingleThreadScheduledExecutor();  // Krijon një executor për të drejtuar periodikisht një task
+        scheduler.scheduleAtFixedRate(this::tick, 1, 1, TimeUnit.SECONDS); // Thërret metodën tick çdo sekondë për të simuluar kohën
     }
 
-    @FXML
+    @FXML // Lidh metodën me butonin për shtimin e një procesi të ri
     private void onAddProcess() {
         try {
-            int burstTime = Integer.parseInt(burstInput.getText());
-            if (burstTime <= 0) throw new NumberFormatException();
-            Process p = new Process(burstTime, systemTime);
-            Platform.runLater(() -> {
-                pq.add(p);
-                readyQueue.add(p);
-                burstInput.clear();
+            int burstTime = Integer.parseInt(burstInput.getText()); // Merr vlerën e burst time nga inputi dhe e konverton në int
+            if (burstTime <= 0) throw new NumberFormatException(); // Kontrollon që burst time të jetë > 0, ndryshe hedh përjashtim
+            Process p = new Process(burstTime, systemTime); // Krijon një objekt të ri Process me burst time dhe kohën aktuale
+            Platform.runLater(() -> {  // Siguron që veprimet në GUI të ndodhin në thread-in e duhur (JavaFX UI Thread)
+                pq.add(p); // Shton procesin në prioritet queue
+                readyQueue.add(p); // Shton procesin në listen e paraqitur në tabelë
+                burstInput.clear(); // Pastron input-in pasi shtohet procesi
             });
         } catch (NumberFormatException e) {
-            showError("Please enter a valid burst time > 0.");
+            showError("Please enter a valid burst time > 0."); // Në rast gabimi, shfaq mesazh për përdoruesin
         }
     }
 
-    private void tick() {
+    private void tick() { // Kjo metodë simolon 'tik-takun' e kohës, thirret çdo sekondë
         systemTime++;
 
-        Platform.runLater(() -> {
-            SFJController.Process current = pq.peek();
+        Platform.runLater(() -> { // Siguron që ndryshimet në GUI të ndodhin në thread-in e duhur
+            SFJController.Process current = pq.peek(); // Merr procesin aktual që do të ekzekutohet (me burst më të vogël)
 
             for (Process p : pq) {
-                if (p != current && p.arrivalTime <= systemTime && p.remainingTime > 0) {
-                    p.waitingTime++;
+                if (p != current && p.arrivalTime <= systemTime && p.remainingTime > 0) { // Nëse nuk është procesi aktual, ka arritur dhe ka ende kohë për t'u ekzekutuar
+                    p.waitingTime++; // Rrit kohën e pritjes për këtë proces
                 }
             }
 
-            if (current != null) {
-                if (!current.started) {
-                    current.responseTime = systemTime - current.arrivalTime;
-                    current.started = true;
+            if (current != null) { // Nëse ka një proces që po ekzekutohet
+                if (!current.started) { // Nëse ky proces po fillon për herë të parë
+                    current.responseTime = systemTime - current.arrivalTime;  // Llogarit response time
+                    current.started = true; // E shënon si të filluar
                 }
                 current.remainingTime--;
                 processTable.refresh();
