@@ -1,4 +1,4 @@
-// Paketa dhe importet e nevojshme për JavaFX, koleksione dhe ekzekutim periodik
+// Paketa dhe importet e nevojshme per JavaFX, koleksione dhe ekzekutim periodik
 package com.example.shortestjobfirstpreemptive;
 
 import javafx.application.Platform;
@@ -11,21 +11,22 @@ import javafx.collections.ObservableList;
 import java.util.*;
 import java.util.concurrent.*;
 
+// Controller i JavaFX per simulimin e algoritmit Shortest Job First (preemptive)
 public class SFJControllerAutomatic {
 
-    // Etiketa për mesataret e kohëve dhe për procesin aktual
+    // Label ne UI per shfaqjen e mesatareve dhe procesit aktual ne ekzekutim
     @FXML private Label avgTurnaroundLabel;
     @FXML private Label avgWaitingLabel;
     @FXML private Label avgResponseLabel;
     @FXML private Label currentProcessLabel;
 
-    // Tabela për proceset në ekzekutim (Ready Queue)
+    // Tabela per proceset aktive qe jane ne pritje apo ne ekzekutim
     @FXML private TableView<Process> processTable;
     @FXML private TableColumn<Process, Integer> idCol;
     @FXML private TableColumn<Process, Integer> burstCol;
     @FXML private TableColumn<Process, Integer> remainingCol;
 
-    // Tabela për proceset e përfunduara
+    // Tabela per proceset e perfunduara me te dhenat per id, burst time, arrival time, waiting time, respone time, turnaround time
     @FXML private TableView<Process> completedTable;
     @FXML private TableColumn<Process, Integer> completedIdCol;
     @FXML private TableColumn<Process, Integer> completedBurstCol;
@@ -34,78 +35,132 @@ public class SFJControllerAutomatic {
     @FXML private TableColumn<Process, Integer> turnaroundTimeCol;
     @FXML private TableColumn<Process, Integer> arrivalTimeCol;
 
-    // Fusha tekstuale për inputin e përdoruesit (arrival dhe burst time për deri në 5 procese)
+    // Fushat tekstuale per inputet e perdoruesit - arrival dhe burst time per 5 procese
     @FXML private TextField arrivalInput1, burstInput1;
     @FXML private TextField arrivalInput2, burstInput2;
     @FXML private TextField arrivalInput3, burstInput3;
     @FXML private TextField arrivalInput4, burstInput4;
     @FXML private TextField arrivalInput5, burstInput5;
 
-    // Butoni për të nisur simulimin
+    // Butonat per nisje, ndalim, vazhdim dhe resetim te simulimit
     @FXML private Button startButton;
+    @FXML private Button stopButton;
+    @FXML private Button resetButton;
+    @FXML private Button continueButton;
 
-    // Ruajtja e proceseve të futura automatikisht me arrival time unik
-    private final Map<Integer, Integer> autoProcesses = new HashMap<>();
+    // Lista qe ruan proceset e dhena nga perdoruesi para nisjes se simulimit
+    private final List<Process> autoProcesses = new ArrayList<>();
 
-    // Metodë që ekzekutohet kur klikohet butoni Start
+    // Metoda qe ekzekutohet kur perdoruesi klikon Start - merr inputet dhe fillon simulimin
     @FXML
     private void onStartSimulation() {
-        autoProcesses.clear();
+        autoProcesses.clear(); // Pastron listen e proceseve te meparshme
 
         try {
-            // Merr të dhënat nga inputet dhe shton proceset
+            // Merr inputet dhe i konverton ne procese, Exception nese inputi nuk eshte valid
             addProcessFromInputs(arrivalInput1, burstInput1);
             addProcessFromInputs(arrivalInput2, burstInput2);
             addProcessFromInputs(arrivalInput3, burstInput3);
             addProcessFromInputs(arrivalInput4, burstInput4);
             addProcessFromInputs(arrivalInput5, burstInput5);
         } catch (NumberFormatException e) {
+            // Shfaq error per perdoruesin nese ka gabim ne input
             showError("Please enter valid arrival and burst times. Arrival times must be unique, >= 0, and burst times must be > 0.");
             return;
         }
 
-        // Reseton kohën dhe listat për një simulim të ri
+        // Rinisin variablat dhe listat per simulim te ri
         systemTime = 0;
         pq.clear();
         readyQueue.clear();
         completedList.clear();
     }
 
-    // Merr një çift arrival/burst nga inputet dhe e shton në hartën e proceseve automatike
+    // Ndalon ekzekutimin e simulimit
+    @FXML
+    private void onStopSimulation() {
+        if (scheduler != null && !scheduler.isShutdown()) {
+            scheduler.shutdown();  // Ndalon tick-un periodik
+        }
+        currentProcessLabel.setText("Simulation paused at time: " + systemTime);
+    }
+
+    // Vazhdo ekzekutimin ne rast se ishte ndalur me pare
+    @FXML
+    private void onContinueSimulation() {
+        if (scheduler == null || scheduler.isShutdown()) {
+            scheduler = Executors.newSingleThreadScheduledExecutor();
+            // Planifikon ekzekutimin e metodes tick() çdo 1 sekonde
+            scheduler.scheduleAtFixedRate(this::tick, 1, 1, TimeUnit.SECONDS);
+            currentProcessLabel.setText("Simulation resumed at time: " + systemTime);
+        }
+    }
+
+    // Reseton simulimin dhe fshin te gjitha te dhenat dhe inputet
+    @FXML
+    private void onResetSimulation() {
+        if (scheduler != null && !scheduler.isShutdown()) {
+            scheduler.shutdown();
+        }
+        systemTime = 0;
+        autoProcesses.clear();
+        pq.clear();
+        readyQueue.clear();
+        completedList.clear();
+        currentProcessLabel.setText("Simulation reset.");
+
+        // Reseton mesataret
+        avgTurnaroundLabel.setText("0");
+        avgWaitingLabel.setText("0");
+        avgResponseLabel.setText("0");
+
+        // Fshin fushat e inputit
+        arrivalInput1.clear(); burstInput1.clear();
+        arrivalInput2.clear(); burstInput2.clear();
+        arrivalInput3.clear(); burstInput3.clear();
+        arrivalInput4.clear(); burstInput4.clear();
+        arrivalInput5.clear(); burstInput5.clear();
+    }
+
+    // Merr vlerat e arrival dhe burst time nga fushat input dhe i shton ne listen e proceseve
     private void addProcessFromInputs(TextField arrivalInput, TextField burstInput) throws NumberFormatException {
         String arrivalText = arrivalInput.getText().trim();
         String burstText = burstInput.getText().trim();
 
+        // Nese fushat jane bosh, nuk ben asgje
         if (arrivalText.isEmpty() && burstText.isEmpty()) return;
         if (arrivalText.isEmpty() || burstText.isEmpty()) throw new NumberFormatException();
 
         int arrival = Integer.parseInt(arrivalText);
         int burst = Integer.parseInt(burstText);
 
+        // Kontrollon vlefshmerine e inputit (arrival >= 0, burst > 0)
         if (arrival < 0 || burst <= 0) throw new NumberFormatException();
-        if (autoProcesses.containsKey(arrival)) throw new NumberFormatException("Arrival times must be unique.");
 
-        autoProcesses.put(arrival, burst);
+        // Krijon dhe shton procesin ne listen e proceseve automatike
+        autoProcesses.add(new Process(burst, arrival));
     }
 
-    // Lista e proceseve në pritje (ready queue)
+    // ObservableList per proceset qe jane gati per ekzekutim dhe shfaqen ne tabelen e proceseve aktive
     private final ObservableList<Process> readyQueue = FXCollections.observableArrayList();
-    // Lista e proceseve të përfunduara
+    // ObservableList per proceset e perfunduara qe shfaqen ne tabelen e perfunduar
     private final ObservableList<Process> completedList = FXCollections.observableArrayList();
-    // Prioritet queue për të zgjedhur procesin me kohën më të shkurtër të mbetur
+
+    // PriorityQueue qe zgjedh procesin me kohen me te shkurter te mbetur (shortest remaining time)
     private final PriorityQueue<Process> pq = new PriorityQueue<>(Comparator.comparingInt(p -> p.remainingTime));
 
-    private ScheduledExecutorService scheduler; // Ekzekutues për çdo sekondë (simulimi në kohë reale)
-    private int systemTime = 0; // Koha aktuale e sistemit
+    private ScheduledExecutorService scheduler; // Executor qe planifikon tick() çdo sekonde
+    private int systemTime = 0; // Koha e sistemit qe rritet me secilin tick
 
-    // Inicializimi i komponentëve UI dhe fillimi i ekzekutimit të tick() çdo sekondë
+    // Metoda initialize e JavaFX, lidh kolonat e tabelave me fushat e objekteve Process dhe nis tick-un periodik
     @FXML
     public void initialize() {
-        // Lidh kolonat me fushat përkatëse të klasës Process
+        // Lidh kolonat e tabeles se proceseve aktive me fushat e objektit Process
         idCol.setCellValueFactory(new PropertyValueFactory<>("id"));
         burstCol.setCellValueFactory(new PropertyValueFactory<>("burstTime"));
         remainingCol.setCellValueFactory(new PropertyValueFactory<>("remainingTime"));
 
+        // Lidh kolonat e tabeles se proceseve te perfunduara
         completedIdCol.setCellValueFactory(new PropertyValueFactory<>("id"));
         completedBurstCol.setCellValueFactory(new PropertyValueFactory<>("burstTime"));
         waitingTimeCol.setCellValueFactory(new PropertyValueFactory<>("waitingTime"));
@@ -113,47 +168,53 @@ public class SFJControllerAutomatic {
         turnaroundTimeCol.setCellValueFactory(new PropertyValueFactory<>("turnaroundTime"));
         arrivalTimeCol.setCellValueFactory(new PropertyValueFactory<>("arrivalTime"));
 
-        // Vendos të dhënat për tabelat
+        // Vendos te dhenat e tabelave ne ObservableList-et e pershtatshme
         processTable.setItems(readyQueue);
         completedTable.setItems(completedList);
 
-        // Nis simulimin e kohës në mënyrë periodike çdo 1 sekondë
+        // Nis scheduler-in qe therret tick() çdo 1 sekonde per simulimin ne kohe reale
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(this::tick, 1, 1, TimeUnit.SECONDS);
     }
 
-    // Shton një proces në queue dhe në listën e paraqitjes
+    // Shton nje proces ne PriorityQueue dhe ne listen e proceseve aktive (readyQueue)
     private void addProcess(Process p) {
         pq.add(p);
         readyQueue.add(p);
     }
 
-    // Ekzekutohet çdo sekondë për të simuluar kalimin e kohës dhe menaxhimin e proceseve
+    // Metoda kryesore qe ekzekutohet çdo sekonde per te simuluar kalimin e kohes dhe perpunimin e proceseve
     private void tick() {
-        systemTime++;
+        systemTime++; // Rrit kohen e sistemit
 
-        // Kontrollon nëse ndonjë proces duhet të mbërrijë në këtë kohë
-        if (autoProcesses.containsKey(systemTime - 1)) {
-            Process p = new Process(autoProcesses.get(systemTime - 1), systemTime - 1);
+        // Kontrollon nese ndonje proces ka ardhur ne kete kohe (arrivalTime == systemTime-1)
+        List<Process> toAdd = new ArrayList<>();
+        for (Process p : autoProcesses) {
+            if (p.arrivalTime == systemTime - 1) {
+                toAdd.add(p);
+            }
+        }
+        // Shton proceset e reja ne queue dhe ne tabele ne thread-in e UI-se
+        for (Process p : toAdd) {
             Platform.runLater(() -> addProcess(p));
         }
 
         Platform.runLater(() -> {
-            Process current = pq.peek(); // Merr procesin me kohën më të shkurtër të mbetur
+            Process current = pq.peek(); // Merr procesin me kohen me te shkurter te mbetur
             if (current != null) {
-                // Nëse nuk ka filluar ende, vendos kohën e përgjigjes
+                // Nese procesi nuk ka filluar me pare, cakton kohen e pergjigjes (response time)
                 if (!current.started) {
-                    current.responseTime = systemTime - current.arrivalTime;
+                    current.responseTime = systemTime - current.arrivalTime - 1;
                     current.started = true;
                 }
-                // Zvogëlon kohën e mbetur për procesin aktual
+                // Zvogelon kohen e mbetur per ekzekutim
                 current.remainingTime--;
-                processTable.refresh();
+                processTable.refresh(); // Perditeson tabelen e proceseve aktive
                 currentProcessLabel.setText("Running Process: P" + current.id);
 
-                // Nëse procesi ka përfunduar, e heq nga queue dhe e shton në listën e përfunduara
+                // Nese procesi perfundon, e heq nga queue dhe e shton ne listen e perfunduara
                 if (current.remainingTime == 0) {
-                    pq.poll();
+                    pq.poll(); // Hiq nga prioriteti
                     current.completionTime = systemTime;
                     current.turnaroundTime = current.completionTime - current.arrivalTime;
                     current.waitingTime = current.turnaroundTime - current.burstTime;
@@ -162,15 +223,18 @@ public class SFJControllerAutomatic {
                     readyQueue.remove(current);
                     completedList.add(current);
                     currentProcessLabel.setText("Running Process: None");
+
+                    // Perditeson mesataret ne UI
                     updateAverages();
                 }
             } else {
+                // Nese nuk ka procese per ekzekutim
                 currentProcessLabel.setText("Running Process: None");
             }
         });
     }
 
-    // Tregon një dritare gabimi nëse inputi është i pavlefshëm
+    // Shfaq dritaren e gabimit ne UI ne rast te inputeve te pavlefshme
     private void showError(String message) {
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.ERROR);
@@ -181,7 +245,7 @@ public class SFJControllerAutomatic {
         });
     }
 
-    // Përditëson mesataret për turnaround, waiting dhe response time në UI
+    // Perditeson vlerat mesatare te turnaround, waiting dhe response time
     private void updateAverages() {
         int n = completedList.size();
         if (n == 0) {
@@ -195,32 +259,34 @@ public class SFJControllerAutomatic {
         double totalWaiting = 0;
         double totalResponse = 0;
 
+        // Shton te gjitha vlerat per te llogaritur mesataret
         for (Process p : completedList) {
             totalTurnaround += p.turnaroundTime;
             totalWaiting += p.waitingTime;
             totalResponse += p.responseTime;
         }
 
+        // Shfaq mesataret me dy shifra pas presjes dhjetore
         avgTurnaroundLabel.setText(String.format("%.2f", totalTurnaround / n));
         avgWaitingLabel.setText(String.format("%.2f", totalWaiting / n));
         avgResponseLabel.setText(String.format("%.2f", totalResponse / n));
     }
 
-    // Klasa e brendshme që përfaqëson një proces
+    // Klasa brenda qe perfaqeson nje proces me te gjitha fushat dhe metodat e nevojshme
     public static class Process {
-        private static int idCounter = 1;
+        private static int idCounter = 1; // Numerues unik per çdo proces
 
-        public int id;
-        public int burstTime;
-        public int remainingTime;
-        public int arrivalTime;
-        public int responseTime = -1;
-        public int completionTime;
-        public int turnaroundTime;
-        public int waitingTime;
-        public boolean started = false;
+        public int id;             // ID e procesit
+        public int burstTime;      // Koha totale per ekzekutim
+        public int remainingTime;  // Koha e mbetur per ekzekutim
+        public int arrivalTime;    // Koha kur procesi mberrin ne sistem
+        public int responseTime = -1;   // Koha e pergjigjes (first run - arrival)
+        public int completionTime; // Koha kur procesi perfundon
+        public int turnaroundTime; // Koha totale qe procesi kalon ne sistem
+        public int waitingTime;    // Koha qe procesi pret ne queue
+        public boolean started = false; // Nese procesi ka filluar ekzekutimin
 
-        // Konstruktori për një proces të ri
+        // Konstruktor qe merr burst dhe arrival time dhe cakton id automatikisht
         public Process(int burstTime, int arrivalTime) {
             this.id = idCounter++;
             this.burstTime = burstTime;
@@ -228,7 +294,7 @@ public class SFJControllerAutomatic {
             this.arrivalTime = arrivalTime;
         }
 
-        // Metodat getter për t’u përdorur në tabelat JavaFX
+        // Getters per t’i lidhur me kolonat e tabelave ne JavaFX
         public int getId() { return id; }
         public int getBurstTime() { return burstTime; }
         public int getRemainingTime() { return remainingTime; }
