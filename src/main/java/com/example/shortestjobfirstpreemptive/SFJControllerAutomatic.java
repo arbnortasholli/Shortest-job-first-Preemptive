@@ -22,10 +22,6 @@ public class SFJControllerAutomatic {
     private Label avgResponseLabel;
 
     @FXML
-    private TextField burstInput;
-    @FXML
-    private Button addButton;
-    @FXML
     private Label currentProcessLabel;
     @FXML
     private TableView<Process> processTable;
@@ -51,20 +47,86 @@ public class SFJControllerAutomatic {
     @FXML
     private TableColumn<Process, Integer> arrivalTimeCol;
 
+    @FXML
+    private TextField arrivalInput1;
+    @FXML
+    private TextField burstInput1;
+    @FXML
+    private TextField arrivalInput2;
+    @FXML
+    private TextField burstInput2;
+    @FXML
+    private TextField arrivalInput3;
+    @FXML
+    private TextField burstInput3;
+    @FXML
+    private TextField arrivalInput4;
+    @FXML
+    private TextField burstInput4;
+    @FXML
+    private TextField arrivalInput5;
+    @FXML
+    private TextField burstInput5;
+
+    @FXML
+    private Button startButton;
+
+    private final Map<Integer, Integer> autoProcesses = new HashMap<>();
+
+    @FXML
+    private void onStartSimulation() {
+        autoProcesses.clear();
+
+        try {
+            addProcessFromInputs(arrivalInput1, burstInput1);
+            addProcessFromInputs(arrivalInput2, burstInput2);
+            addProcessFromInputs(arrivalInput3, burstInput3);
+            addProcessFromInputs(arrivalInput4, burstInput4);
+            addProcessFromInputs(arrivalInput5, burstInput5);
+        } catch (NumberFormatException e) {
+            showError("Please enter valid arrival and burst times. Arrival times must be unique, >= 0, and burst times must be > 0.");
+            return;
+        }
+
+        systemTime = 0;
+        pq.clear();
+        readyQueue.clear();
+        completedList.clear();
+
+    }
+
+    private void addProcessFromInputs(TextField arrivalInput, TextField burstInput) throws NumberFormatException {
+        String arrivalText = arrivalInput.getText().trim();
+        String burstText = burstInput.getText().trim();
+
+        if (arrivalText.isEmpty() && burstText.isEmpty()) {
+            return;
+        }
+
+        if (arrivalText.isEmpty() || burstText.isEmpty()) {
+            throw new NumberFormatException("Arrival and burst time must both be provided or both empty.");
+        }
+
+        int arrival = Integer.parseInt(arrivalText);
+        int burst = Integer.parseInt(burstText);
+
+        if (arrival < 0 || burst <= 0) throw new NumberFormatException();
+
+        if (autoProcesses.containsKey(arrival)) {
+            throw new NumberFormatException("Arrival times must be unique.");
+        }
+
+        autoProcesses.put(arrival, burst);
+    }
+
+
+
     private final ObservableList<Process> readyQueue = FXCollections.observableArrayList();
     private final ObservableList<Process> completedList = FXCollections.observableArrayList();
     private final PriorityQueue<Process> pq = new PriorityQueue<>(Comparator.comparingInt(p -> p.remainingTime));
 
     private ScheduledExecutorService scheduler;
     private int systemTime = 0;
-
-    private final Map<Integer, Integer> autoProcesses = Map.of(
-            0, 3,
-            1, 8,
-            2, 6,
-            4, 4,
-            5, 2
-    );
 
     @FXML
     public void initialize() {
@@ -86,17 +148,6 @@ public class SFJControllerAutomatic {
         scheduler.scheduleAtFixedRate(this::tick, 1, 1, TimeUnit.SECONDS);
     }
 
-    @FXML
-    private void onAddProcess() {
-        try {
-            int burstTime = Integer.parseInt(burstInput.getText());
-            if (burstTime <= 0) throw new NumberFormatException();
-            addProcess(new Process(burstTime, systemTime));
-            burstInput.clear();
-        } catch (NumberFormatException e) {
-            showError("Please enter a valid burst time > 0.");
-        }
-    }
 
     private void addProcess(Process p) {
         pq.add(p);
